@@ -1,0 +1,6 @@
+__pycache__/
+*.egg-info/
+.venv/
+runs/
+*.arena.bin.gz
+*.arena.json.gz

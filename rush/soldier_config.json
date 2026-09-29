@@ -1,0 +1,230 @@
+{
+ "d_model": 128,
+ "heads": 4,
+ "layers": 2,
+ "features": 256,
+ "lstm_hidden": 256,
+ "critic_hidden": 256,
+ "state_hidden": 256,
+ "nvec": [
+  9,
+  2,
+  7,
+  2
+ ],
+ "aux_aim": true,
+ "layout": [
+  {
+   "name": "core",
+   "kind": "vector",
+   "count": 1,
+   "size": 66,
+   "n_old": 46,
+   "old_start": 0,
+   "count_old": 1,
+   "new_features": [
+    "ammo_frac",
+    "ammo_abs",
+    "refilling",
+    "refill_eta",
+    "dmg_recent",
+    "since_dmg",
+    "incoming_n",
+    "incoming_ttc",
+    "spread_now",
+    "ord_has",
+    "ord_dx",
+    "ord_dy",
+    "ord_path",
+    "ord_rx",
+    "ord_ry",
+    "ord_owner",
+    "front_has",
+    "front_dx",
+    "front_dy",
+    "front_path"
+   ],
+   "path": "old",
+   "start": 0
+  },
+  {
+   "name": "entities_old",
+   "kind": "tokens",
+   "count": 9,
+   "size": 30,
+   "n_old": 30,
+   "old_start": 46,
+   "count_old": 9,
+   "new_features": [],
+   "path": "old",
+   "start": 66
+  },
+  {
+   "name": "entities",
+   "kind": "tokens",
+   "count": 32,
+   "size": 33,
+   "n_old": 30,
+   "old_start": null,
+   "count_old": 0,
+   "new_features": [
+    "ammo_frac",
+    "ammo_known",
+    "on_own_cp"
+   ],
+   "path": "new",
+   "start": 336
+  },
+  {
+   "name": "bullets",
+   "kind": "tokens",
+   "count": 8,
+   "size": 10,
+   "n_old": 10,
+   "old_start": 316,
+   "count_old": 8,
+   "new_features": [],
+   "path": "old",
+   "start": 1392
+  },
+  {
+   "name": "cps",
+   "kind": "tokens",
+   "count": 7,
+   "size": 16,
+   "n_old": 14,
+   "old_start": 396,
+   "count_old": 7,
+   "new_features": [
+    "refill_here",
+    "refill_eta"
+   ],
+   "path": "old",
+   "start": 1472
+  },
+  {
+   "name": "lastseen",
+   "kind": "tokens",
+   "count": 5,
+   "size": 17,
+   "n_old": 17,
+   "old_start": 494,
+   "count_old": 5,
+   "new_features": [],
+   "path": "old",
+   "start": 1584
+  },
+  {
+   "name": "grid",
+   "kind": "grid",
+   "count": 1,
+   "size": [
+    2,
+    15,
+    15
+   ],
+   "n_old": [
+    2,
+    15,
+    15
+   ],
+   "old_start": 579,
+   "count_old": 1,
+   "new_features": [],
+   "path": "old",
+   "start": 1669
+  },
+  {
+   "name": "grid21",
+   "kind": "grid",
+   "count": 1,
+   "size": [
+    2,
+    21,
+    21
+   ],
+   "n_old": null,
+   "old_start": null,
+   "count_old": 0,
+   "new_features": [
+    "walls",
+    "cp_zone_signed"
+   ],
+   "path": "new",
+   "start": 2119
+  },
+  {
+   "name": "entities_more",
+   "kind": "tokens",
+   "count": 24,
+   "size": 33,
+   "n_old": 30,
+   "old_start": null,
+   "count_old": 0,
+   "new_features": [
+    "ammo_frac",
+    "ammo_known",
+    "on_own_cp"
+   ],
+   "path": "new",
+   "start": 3001
+  },
+  {
+   "name": "bullets_pool",
+   "kind": "tokens",
+   "count": 32,
+   "size": 10,
+   "n_old": null,
+   "old_start": null,
+   "count_old": 0,
+   "new_features": [
+    "danger_ordered"
+   ],
+   "path": "new",
+   "start": 3793
+  },
+  {
+   "name": "battle",
+   "kind": "grid",
+   "count": 1,
+   "size": [
+    6,
+    17,
+    17
+   ],
+   "n_old": null,
+   "old_start": null,
+   "count_old": 0,
+   "new_features": [
+    "allies",
+    "enemies_seen",
+    "cp_mine",
+    "cp_theirs",
+    "cp_neutral",
+    "walls"
+   ],
+   "path": "new",
+   "start": 4113
+  }
+ ],
+ "state_size": 259,
+ "floating_attn": {
+  "heads": 4
+ },
+ "readout_segs": [
+  "entities",
+  "grid21",
+  "entities_more",
+  "bullets_pool",
+  "battle"
+ ],
+ "query_cols": [
+  46,
+  50,
+  51,
+  52,
+  53,
+  54
+ ],
+ "layout_version": 4
+}
