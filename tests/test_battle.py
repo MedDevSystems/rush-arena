@@ -46,9 +46,26 @@ def test_gate_equal_players_is_undecided(tmp_path, monkeypatch):
         (lg / d).mkdir(parents=True)
     (lg / "current.json").write_text(json.dumps({"gen": 0, "dir": "gen_000"}))
     (lg / "candidates.jsonl").write_text(json.dumps({"iter": 5, "dir": "cand_00005"}) + "\n")
-    monkeypatch.setattr(gate, "play", lambda *a, **k: {"score": [10.0, 10.0]})
-    v = gate.run_gate(tmp_path, max_pairs=3)
+    monkeypatch.setattr(gate, "play", lambda *a, **k: {"score": [10.0, 10.0], "control_margin": 0.0, "winner": "draw"})
+    v = gate.run_gate(tmp_path, max_pairs=3, record_first=False)
     assert v["decision"] == "undecided" and len(v["pairs"]) == 3 and "new_gen" not in v
+    assert len((lg / "matches.jsonl").read_text().splitlines()) == 6 and "cand_00005" in v["ratings"]
+
+
+def test_gate_promotes_on_control(tmp_path, monkeypatch):
+    """A candidate that holds more of the map in every pair is promoted, and the new generation is its synonym."""
+    from rush import gate
+    lg = tmp_path / "league"
+    for d in ("gen_000", "cand_00005"):
+        (lg / d).mkdir(parents=True)
+    (lg / "cand_00005" / "ckpt_base_latest.pt").write_bytes(b"x")
+    (lg / "current.json").write_text(json.dumps({"gen": 0, "dir": "gen_000"}))
+    (lg / "candidates.jsonl").write_text(json.dumps({"iter": 5, "dir": "cand_00005"}) + "\n")
+    margins = iter([0.20, -0.18, 0.22, -0.21, 0.19, -0.23])                 # blue = candidate, then red = candidate
+    monkeypatch.setattr(gate, "play", lambda *a, **k: {"score": [1.0, 1.0], "control_margin": next(margins), "winner": "blue"})
+    v = gate.run_gate(tmp_path, max_pairs=3, record_first=False)
+    assert v["decision"] == "promote" and v["new_gen"] == 1
+    assert json.loads((lg / "current.json").read_text())["dir"] == "gen_001" and "cand_00005" not in v["ratings"]
 
 
 def test_selfplay_two_iterations(tmp_path):

@@ -223,6 +223,7 @@ class SelfPlayTrainer:
         self._load_opponent()
         self.w_opp: list[int] = [self.gen for _ in range(cfg.worlds)]
         self.pending: set[int] = set()
+        self.ctrl, self.ctrl_n = [0.0] * cfg.worlds, [0] * cfg.worlds   # control margin accumulated per match
         self._assign_rows()
         self.NL = int(self.L.numel())
         self.st_l = model.initial_state(R, dev)
@@ -378,14 +379,20 @@ class SelfPlayTrainer:
             for i, w in enumerate(self.worlds):
                 sl = slice(i * self.A, (i + 1) * self.A)
                 score = [float(s) for s in w.world.score[0]]
+                cpo = w.world.cp_owner[0]
+                self.ctrl[i] += float((cpo == 1).float().mean()) - float((cpo == 2).float().mean())
+                self.ctrl_n[i] += 1
                 res = w.step(act[sl])
                 tau = self.c_tau[self.row_cls[sl]]
                 rew[sl] = (1.0 - tau) * res["r_indiv"].float() + tau * res["info"]["r_team_agent"][0].float()
                 if res["done"]:
                     done[sl] = 1.0
                     win, lt = int(res["info"]["winner"][0]), int(self.l_team[i])
+                    cm = self.ctrl[i] / max(1, self.ctrl_n[i])                     # blue minus red, whole match
+                    self.ctrl[i], self.ctrl_n[i] = 0.0, 0
                     results.append({"t": int(time.time()), "iter": self.it, "world": i, "opponent": f"gen{self.w_opp[i]}",
-                                    "learner_team": lt, "winner": win, "learner_won": win == lt + 1, "score": score})
+                                    "learner_team": lt, "winner": win, "learner_won": win == lt + 1, "score": score,
+                                    "learner_control_margin": round(cm if lt == 0 else -cm, 4)})
                     self.pending.add(i)
             self.b_rew[t] = rew[L]
             self.b_done[t] = done[L]
@@ -520,6 +527,9 @@ class SelfPlayTrainer:
             logger.info("iteration " + json.dumps(row))
             if self.it % cfg.gen_every == 0:
                 self._write_candidate()
+                from rush.league_elo import rate_league
+                top = list(rate_league(self.league, cfg.gen_every)["ratings"].items())[:5]
+                logger.info("Elo (training battles so far): " + ", ".join(f"{p} {r:.0f}" for p, r in top))
             if self.it % cfg.ckpt_every == 0:
                 self.save("periodic")
             if cfg.max_iters and self.it >= cfg.max_iters:

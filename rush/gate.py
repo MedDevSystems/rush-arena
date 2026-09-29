@@ -1,10 +1,13 @@
 """The generation gate of self-play, run locally: is the newest candidate stronger than the current generation?
 
 A pair = two full battles on the same seed with the sides swapped (the same start cancels most of the map's side
-bias); the pair's margin = the candidate's score minus the generation's, summed over both battles. Pairs are added
-one by one; after each (from the second on) a one-sided paired t-test at 5 %: t > t_crit -> the candidate becomes
-the next generation (league/gen_XXX + league/current.json, which the running trainer picks up), t < -t_crit -> it is
-weaker; undecided after --max-pairs -> not promoted.
+bias). The pair's margin is measured over the WHOLE battle, not by its final score: the candidate's average share of
+the control points held minus the generation's, summed over both battles (the final score saturates at the winning
+total and hides everything that happened before). Pairs are added one by one; from the second on, a one-sided paired
+t-test at 5 %: t > t_crit -> the candidate becomes the next generation (league/gen_XXX + league/current.json, which the
+running trainer picks up), t < -t_crit -> it is weaker; undecided after --max-pairs -> not promoted.
+
+Every battle is appended to league/matches.jsonl and the league's Elo ratings (rush.league_elo) are refitted.
 """
 from __future__ import annotations
 
@@ -18,12 +21,22 @@ import time
 from pathlib import Path
 
 from rush.battle import play
+from rush.league_elo import rate_league
 
-T_CRIT_95 = {1: 6.314, 2: 2.920, 3: 2.353, 4: 2.132, 5: 2.015, 6: 1.943, 7: 1.895, 8: 1.860, 9: 1.833, 10: 1.812}
+T_CRIT_95 = {1: 6.314, 2: 2.920, 3: 2.353, 4: 2.132, 5: 2.015, 6: 1.943, 7: 1.895, 8: 1.860, 9: 1.833, 10: 1.812,
+             11: 1.796, 12: 1.782, 13: 1.771, 14: 1.761, 15: 1.753, 16: 1.746, 17: 1.740, 18: 1.734, 19: 1.729}
+
+
+def _log_battle(lg: Path, blue: str, red: str, r: dict, kind: str) -> None:
+    rec = {"t": int(time.time()), "kind": kind, "blue": blue, "red": red, "map": r.get("map"), "seed": r.get("seed"),
+           "winner": {"blue": 1, "red": 2}.get(r.get("winner"), 0), "score": r.get("score"),
+           "control_margin": r.get("control_margin"), "decisions": r.get("decisions")}
+    with open(lg / "matches.jsonl", "a") as f:
+        f.write(json.dumps(rec) + "\n")
 
 
 def run_gate(run_dir: Path, candidate: str = "", map_name: str = "Warfront500", seed: int = 200, max_pairs: int = 6,
-             device: str = "cpu", max_decisions: int = 0) -> dict:
+             device: str = "cpu", max_decisions: int = 0, record_first: bool = True) -> dict:
     lg = run_dir / "league"
     cur = json.loads((lg / "current.json").read_text())
     gen = int(cur["gen"])
@@ -33,21 +46,24 @@ def run_gate(run_dir: Path, candidate: str = "", map_name: str = "Warfront500", 
     lc, lgn = f"Candidate {cand}", f"Generation {gen}"
     diffs, pairs, decision, t = [], [], "undecided", None
     for k in range(max_pairs):
-        rec = lg / f"{cand}_vs_gen{gen}_pair{k}" if k == 0 else None
+        rec = lg / f"{cand}_vs_{cur['dir']}" if (k == 0 and record_first) else None
         ra = play(f"net:{cd}#{lc}", f"net:{gd}#{lgn}", map_name, seed + k, device, max_decisions,
                   f"{rec}_a.arena.bin.gz" if rec else None, log_every=0)
         rb = play(f"net:{gd}#{lgn}", f"net:{cd}#{lc}", map_name, seed + k, device, max_decisions,
                   f"{rec}_b.arena.bin.gz" if rec else None, log_every=0)
-        d = (ra["score"][0] - ra["score"][1]) + (rb["score"][1] - rb["score"][0])
+        _log_battle(lg, cand, cur["dir"], ra, "gate")
+        _log_battle(lg, cur["dir"], cand, rb, "gate")
+        d = ra["control_margin"] - rb["control_margin"]             # candidate minus generation, both battles
         diffs.append(d)
-        pairs.append({"seed": seed + k, "margin": round(d, 1), "cand_blue": ra["score"], "cand_red": rb["score"]})
+        pairs.append({"seed": seed + k, "control_margin": round(d, 4),
+                      "score_margin": round((ra["score"][0] - ra["score"][1]) + (rb["score"][1] - rb["score"][0]), 1)})
         n = len(diffs)
         if n >= 2:
             mu = sum(diffs) / n
             sd = math.sqrt(sum((x - mu) ** 2 for x in diffs) / (n - 1))
             t = mu / (sd / math.sqrt(n)) if sd > 0 else (math.inf if mu > 0 else (-math.inf if mu < 0 else 0.0))
             tc = T_CRIT_95.get(n - 1, 1.645)
-            print(f"pair {n}: mean margin {mu:.0f}, t = {t:.2f} (critical {tc})", flush=True)
+            print(f"pair {n}: mean control margin {mu:+.4f}, t = {t:.2f} (critical {tc})", flush=True)
             if t > tc:
                 decision = "promote"
                 break
@@ -62,9 +78,12 @@ def run_gate(run_dir: Path, candidate: str = "", map_name: str = "Warfront500", 
         gdir.mkdir(parents=True, exist_ok=True)
         shutil.copy(cd / "ckpt_base_latest.pt", gdir / "ckpt_base_latest.pt")
         (lg / "current.json").write_text(json.dumps({"gen": new, "dir": gdir.name, "from": cand, "t": int(time.time())}))
+        with open(lg / "matches.jsonl", "a") as f:                  # the new generation IS the candidate (a synonym)
+            f.write(json.dumps({"t": int(time.time()), "kind": "alias", "blue": gdir.name, "red": cand}) + "\n")
         verdict["new_gen"] = new
     with open(lg / "gates.jsonl", "a") as f:
         f.write(json.dumps(verdict) + "\n")
+    verdict["ratings"] = rate_league(lg)["ratings"]
     return verdict
 
 
@@ -81,6 +100,17 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.WARNING)
     v = run_gate(Path(a.run_dir), a.candidate, a.map, a.seed, a.max_pairs, a.device, a.max_decisions)
     print(json.dumps(v))
+    return 0
+
+
+def ratings_main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="rush-elo", description="Elo ratings of every player of a self-play league.")
+    p.add_argument("--run-dir", required=True)
+    p.add_argument("--gen-every", type=int, default=5)
+    a = p.parse_args(argv)
+    res = rate_league(Path(a.run_dir) / "league", a.gen_every)
+    for name, r in res["ratings"].items():
+        print(f"{r:8.1f}  {name}  ({res['games'].get(name, 0)} battles)")
     return 0
 
 

@@ -19,6 +19,7 @@ rush-battle = "rush.cli:battle"
 rush-view = "rush.cli:view"
 rush-selfplay = "rush.cli:selfplay"
 rush-gate = "rush.cli:gate"
+rush-elo = "rush.gate:ratings_main"
 
 [tool.setuptools.packages.find]
 include = ["rush*"]

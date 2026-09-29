@@ -96,6 +96,7 @@ def play(blue: str, red: str, map_name: str = "Warfront500", seed: int = 0, devi
     writer = _writer(world, forks, agent_fork, [lb, lr], seed) if out is not None else None
     is_blue = (world._agent_team == 0).to(world.pos.device).view(1, A, 1)
     kills = np.zeros(2)
+    ctrl = np.zeros(2)                                          # share of the control points held, summed per decision
     team_of = world._agent_team.cpu().numpy()
     d, done = 0, False
     while not done:
@@ -107,6 +108,8 @@ def play(blue: str, red: str, map_name: str = "Warfront500", seed: int = 0, devi
         d += 1
         inf = o.info
         kills += np.bincount(team_of, weights=inf["kills"][0].cpu().numpy(), minlength=2)
+        cpo = world.cp_owner[0]
+        ctrl += np.array([float((cpo == 1).float().mean()), float((cpo == 2).float().mean())])
         if writer is not None:
             evs = o.events[0] if o.events else []
             writer.add(world.snapshot(0), [e for e in evs if e.get("type") != "shot"],
@@ -120,6 +123,9 @@ def play(blue: str, red: str, map_name: str = "Warfront500", seed: int = 0, devi
         win = 1 if score[0] > score[1] else (2 if score[1] > score[0] else 0)
     res = {"blue": lb, "red": lr, "map": map_name, "seed": seed, "decisions": d, "winner": ["draw", "blue", "red"][win],
            "score": [round(s, 1) for s in score], "kills": kills.astype(int).tolist(), "wall_s": round(time.perf_counter() - t0, 1)}
+    cm = ctrl / max(1, d)
+    res["control"] = [round(float(x), 4) for x in cm]           # average share of the points held over the battle
+    res["control_margin"] = round(float(cm[0] - cm[1]), 4)      # blue minus red, in [-1, 1]: the battle as a whole
     if writer is not None:
         writer.finish(win, "score")
         writer.save(Path(out))
